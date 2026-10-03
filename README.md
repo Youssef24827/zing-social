@@ -1,15 +1,13 @@
 # Zing
 
-Première page de présentation de Zing, un concept de réseau social entre amis.
+Maquette interactive d’un réseau social entre amis avec trois écrans : **Messagerie**, **Carte** et **Profil**.
 
-## Lancer en local
+## Démo
 
-Ouvre `index.html` dans un navigateur. Le site est statique et n'a besoin d'aucune installation.
+Le projet est un site statique en un seul fichier, `index.html`. Ouvre-le dans un navigateur pour afficher la maquette.
 
-## Publier avec GitHub et Vercel
+Les contacts, messages, lieux et positions sont fictifs. La maquette ne demande pas la position réelle, n’envoie aucun message et ne sauvegarde pas les modifications. Les commandes visibles servent à illustrer le parcours de l’application.
 
-1. Crée un dépôt GitHub et ajoute ces fichiers.
-2. Dans Vercel, importe le dépôt GitHub.
-3. Garde les réglages par défaut : Vercel détecte et publie automatiquement le site statique.
+## Publication
 
-Chaque mise à jour envoyée sur GitHub déclenchera un nouveau déploiement Vercel.
+Le dépôt GitHub est connecté à Vercel. Chaque commit sur la branche `main` déclenche un nouveau déploiement.

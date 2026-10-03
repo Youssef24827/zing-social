@@ -16,6 +16,15 @@
     @media(max-width:760px){body{background:#fff}.app{display:block;padding:0;max-width:none}.sidebar{display:none}.workspace{border:0;border-radius:0;min-height:100vh}.topbar{height:59px;padding:0 18px}.screen{padding:25px 17px 92px;min-height:calc(100vh - 59px)}.demo-pill{padding:7px 9px}.page-heading{align-items:flex-start;gap:12px}.page-heading h1{font-size:25px}.page-heading p{max-width:230px;line-height:1.5}.heading-action{padding:10px 11px;white-space:nowrap;font-size:10px}.chat-layout{height:calc(100vh - 300px);min-height:390px;grid-template-columns:1fr}.chat-list{display:none}.chat-panel{min-height:390px}.messages{padding:17px 14px}.conversation-head{padding:0 15px}.composer{padding:10px}.map-grid{grid-template-columns:1fr}.map-card{height:390px}.friends-panel{display:grid;grid-template-columns:1fr 1fr;align-items:start}.friends-card{grid-row:span 2}.profile-layout{grid-template-columns:1fr}.mobile-nav{display:flex;position:fixed;z-index:7;left:12px;right:12px;bottom:12px;height:65px;border:1px solid var(--line);border-radius:19px;background:#ffffffed;backdrop-filter:blur(16px);box-shadow:0 8px 35px #202a1915;justify-content:space-around;align-items:center;padding:5px}.mobile-nav .nav-button{width:auto;min-width:72px;flex-direction:column;gap:3px;padding:7px 8px;font-size:9px;text-align:center}.mobile-nav .nav-icon{font-size:17px}.mobile-nav .badge{display:none}}
     @media(max-width:430px){.friends-panel{grid-template-columns:1fr}.friends-card{grid-row:auto}.map-card{height:355px}.map-search{max-width:185px;overflow:hidden;white-space:nowrap}.profile-card,.settings-card{padding:17px}.stats{gap:15px}}
     @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+    .chat-layout{height:min(700px,calc(100dvh - 220px));min-height:420px}
+    .chat-list,.chat-panel{min-height:0}
+    .chat-list{overflow-y:auto;overscroll-behavior:contain}
+    .chat-panel{height:100%;overflow:hidden}
+    .messages{min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+    .chat-row{position:relative;padding:12px 42px 12px 9px;min-height:64px}
+    .chat-row .avatar{width:44px;height:44px;border-radius:50%;font-size:20px}
+    .chat-row .chat-meta{position:absolute;right:9px;top:15px}
+    @media(max-width:760px){.screen.active#screen-messagerie{padding-bottom:84px}.chat-layout{height:calc(100dvh - 245px);min-height:470px;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(150px,34%) minmax(0,1fr)}.chat-list{display:block;overflow-y:auto;border-right:0;border-bottom:1px solid var(--line);padding:10px}.chat-panel{min-height:0}.messages{padding:15px 12px}}
   </style>
 </head>
 <body>
@@ -24,7 +33,7 @@
       <a class="brand" href="#messagerie" aria-label="Zing, accueil"><span class="brand-mark">✳</span>zing</a>
       <div class="nav-label">Ton espace</div>
       <nav class="nav-list">
-        <button class="nav-button active" data-screen="messagerie"><span class="nav-icon">▤</span>Messagerie<span class="badge">2</span></button>
+        <button class="nav-button active" data-screen="messagerie"><span class="nav-icon">▤</span>Chat<span class="badge">2</span></button>
         <button class="nav-button" data-screen="carte"><span class="nav-icon">⌖</span>Carte</button>
         <button class="nav-button" data-screen="profil"><span class="nav-icon">◉</span>Profil</button>
       </nav>
@@ -34,11 +43,11 @@
       </div>
     </aside>
     <main class="workspace">
-      <header class="topbar"><div class="crumb">zing <span aria-hidden="true">/</span> <strong id="crumb-label">Messagerie</strong></div><div class="top-actions"><span class="demo-pill" id="app-status">✳ Messages privés</span><button class="sign-out" id="sign-out" hidden>Se déconnecter</button><div class="top-avatar" id="top-avatar" aria-label="Ton profil">👋</div></div></header>
+      <header class="topbar"><div class="crumb">zing <span aria-hidden="true">/</span> <strong id="crumb-label">Chat</strong></div><div class="top-actions"><span class="demo-pill" id="app-status">✳ Messages privés</span><button class="sign-out" id="sign-out" hidden>Se déconnecter</button><div class="top-avatar" id="top-avatar" aria-label="Ton profil">👋</div></div></header>
       <section class="screen active" id="screen-messagerie" aria-labelledby="messagerie-title">
-        <div class="page-heading"><div><div class="eyebrow">Tes proches, à portée de message</div><h1 id="messagerie-title">Messagerie</h1><p>Un petit mot peut faire toute la journée.</p></div><button class="heading-action" id="new-message">＋ Nouveau message</button></div>
+        <div class="page-heading"><div><div class="eyebrow">Tes proches, à portée de message</div><h1 id="messagerie-title">Chat</h1><p>Reprends facilement la discussion avec tes amis.</p></div><button class="heading-action" id="new-message">＋ Nouveau message</button></div>
         <div class="chat-layout">
-          <aside class="chat-list" aria-label="Conversations"><input class="search" id="chat-search" type="search" placeholder="⌕  Rechercher un ami" aria-label="Rechercher un ami"><div class="chat-title"><span>Messages récents</span><span id="chat-count">0 ami</span></div><div id="chat-items"></div><div class="empty-chats" id="empty-chats">Aucune conversation. Appuie sur « Nouveau message » pour trouver un membre Zing.</div></aside>
+          <aside class="chat-list" aria-label="Contacts récents"><input class="search" id="chat-search" type="search" placeholder="⌕  Rechercher un ami" aria-label="Rechercher un ami"><div class="chat-title"><span>Contacts récents</span><span id="chat-count">0 contact</span></div><div id="chat-items"></div><div class="empty-chats" id="empty-chats">Aucun contact pour le moment. Appuie sur « Nouveau message » pour trouver un membre Zing.</div></aside>
           <section class="chat-panel" aria-label="Conversation"><div class="conversation-head"><div class="avatar" id="active-avatar" style="background:#dbe9ff">👋</div><div><strong id="active-name">Tes messages</strong><small id="active-presence">Choisis une conversation ou démarre un message.</small></div><button class="head-more" aria-label="Options de conversation">···</button></div><div class="messages" id="messages" aria-live="polite"><div class="day-label">Tes messages privés apparaîtront ici.</div></div><form class="composer" id="message-form"><button class="compose-icon" type="button" id="emoji-button" aria-label="Ajouter un emoji">☺</button><input id="message-input" type="text" placeholder="Écris un message…" autocomplete="off" aria-label="Écris un message" disabled><button class="send" type="submit" aria-label="Envoyer le message" disabled>↑</button></form></section>
         </div>
       </section>
@@ -54,7 +63,7 @@
           <aside class="settings-card"><h2>Confidentialité</h2><p>Tu décides ce que tes amis peuvent voir.</p><div class="setting"><span><strong>Partager ma position</strong><small>Visible pour tes amis choisis</small></span><input class="toggle" id="profile-location-toggle" type="checkbox" aria-label="Partager ma position depuis le profil"></div><div class="setting"><span><strong>Mode invisible</strong><small>Personne ne voit ta position</small></span><input class="toggle" id="invisible-toggle" type="checkbox" aria-label="Activer le mode invisible"></div><div class="setting"><span><strong>Souvenirs privés</strong><small>Seuls toi peux les consulter</small></span><input class="toggle" type="checkbox" checked aria-label="Garder les souvenirs privés"></div><button class="arrive-button" id="arrive-button">🏡 &nbsp; Tester « Bien arrivé·e »</button></aside>
         </div>
       </section>
-      <nav class="mobile-nav" aria-label="Navigation mobile"><button class="nav-button active" data-screen="messagerie"><span class="nav-icon">▤</span>Messages<span class="badge">2</span></button><button class="nav-button" data-screen="carte"><span class="nav-icon">⌖</span>Carte</button><button class="nav-button" data-screen="profil"><span class="nav-icon">◉</span>Profil</button></nav>
+      <nav class="mobile-nav" aria-label="Navigation mobile"><button class="nav-button active" data-screen="messagerie"><span class="nav-icon">▤</span>Chat<span class="badge">2</span></button><button class="nav-button" data-screen="carte"><span class="nav-icon">⌖</span>Carte</button><button class="nav-button" data-screen="profil"><span class="nav-icon">◉</span>Profil</button></nav>
     </main>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

@@ -72,8 +72,9 @@ function signedOut() {
   gate.hidden = false; signOut.hidden = true; byId("app-status").textContent = "✳ Messages privés";
   byId("sidebar-name").textContent = "Invité"; byId("sidebar-handle").textContent = "Connecte-toi pour discuter";
   byId("sidebar-avatar").textContent = byId("top-avatar").textContent = "👋";
-  chatItems.replaceChildren(); chatCount.textContent = "0 conversation"; emptyChats.style.display = "block";
-  emptyChats.textContent = "Connecte-toi pour retrouver tes conversations.";
+  chatItems.replaceChildren(); chatCount.textContent = "0 contact"; emptyChats.style.display = "block";
+  document.querySelectorAll(".nav-button .badge").forEach(badge=>{badge.textContent="0";badge.hidden=true;});
+  emptyChats.textContent = "Connecte-toi pour retrouver tes contacts.";
   messages.innerHTML = '<div class="day-label">Connecte-toi pour démarrer une conversation privée.</div>';
   byId("active-name").textContent = "Tes messages"; byId("active-presence").textContent = "Tes conversations privées apparaîtront ici.";
   input.disabled = send.disabled = true;
@@ -96,7 +97,7 @@ async function refreshChats() {
   if (own.error) return notify("Impossible de charger les conversations.");
   const ids = [...new Set(own.data.map(row => row.conversation_id))];
   chatItems.replaceChildren(); conversations = []; activeId = null;
-  if (!ids.length) { chatCount.textContent="0 conversation"; emptyChats.textContent="Aucune conversation. Appuie sur « Nouveau message » pour trouver un membre."; emptyChats.style.display="block"; messages.innerHTML='<div class="day-label">Tes messages privés apparaîtront ici.</div>'; input.disabled=send.disabled=true; return; }
+  if (!ids.length) { chatCount.textContent="0 contact"; emptyChats.textContent="Aucun contact pour le moment. Appuie sur « Nouveau message » pour trouver un membre."; emptyChats.style.display="block"; messages.innerHTML='<div class="day-label">Tes messages privés apparaîtront ici.</div>'; input.disabled=send.disabled=true; return; }
   const [members, latest] = await Promise.all([
     db.from("conversation_members").select("conversation_id,user_id").in("conversation_id",ids),
     db.from("messages").select("conversation_id,content,created_at").in("conversation_id",ids).order("created_at",{ascending:false}).limit(100)
@@ -108,12 +109,24 @@ async function refreshChats() {
   const byUser=new Map(profiles.data.map(p=>[p.id,p]));
   const byChat=new Map(); members.data.forEach(row=>{if(row.user_id!==user.id)byChat.set(row.conversation_id,byUser.get(row.user_id));});
   const preview=new Map(); latest.data.forEach(row=>{if(!preview.has(row.conversation_id))preview.set(row.conversation_id,row);});
-  conversations=ids.map(id=>({id,profile:byChat.get(id),latest:preview.get(id)})).filter(c=>c.profile);
-  chatCount.textContent=`${conversations.length} conversation${conversations.length===1?"":"s"}`; emptyChats.style.display=conversations.length?"none":"block";
+  const newestByContact=new Map();
+  ids.forEach(id=>{
+    const profile=byChat.get(id); if(!profile)return;
+    const candidate={id,profile,latest:preview.get(id)};
+    const previous=newestByContact.get(profile.id);
+    const candidateTime=Date.parse(candidate.latest?.created_at||0)||0;
+    const previousTime=Date.parse(previous?.latest?.created_at||0)||0;
+    if(!previous||candidateTime>previousTime)newestByContact.set(profile.id,candidate);
+  });
+  conversations=[...newestByContact.values()].sort((a,b)=>(Date.parse(b.latest?.created_at||0)||0)-(Date.parse(a.latest?.created_at||0)||0));
+  chatCount.textContent=`${conversations.length} contact${conversations.length===1?"":"s"}`; emptyChats.style.display=conversations.length?"none":"block";
+  document.querySelectorAll(".nav-button .badge").forEach(badge=>{badge.textContent=String(conversations.length);badge.hidden=!conversations.length;});
   conversations.forEach(c=>{
-    const name=c.profile.display_name||c.profile.username, row=document.createElement("button"), face=document.createElement("span"), copy=document.createElement("span"), title=document.createElement("strong"), previewText=document.createElement("small");
+    const name=c.profile.display_name||c.profile.username, row=document.createElement("button"), face=document.createElement("span"), copy=document.createElement("span"), title=document.createElement("strong"), previewText=document.createElement("small"), time=document.createElement("time");
     row.type="button"; row.className="chat-row"; row.dataset.chat=c.id; row.dataset.name=name; face.className="avatar"; face.textContent=avatar(name);
-    copy.className="chat-copy"; title.textContent=name; previewText.textContent=c.latest?.content||"Commencez à discuter"; copy.append(title,previewText); row.append(face,copy);
+    copy.className="chat-copy"; title.textContent=name; previewText.textContent=c.latest?.content||"Commencez à discuter"; copy.append(title,previewText);
+    if(c.latest?.created_at){time.className="chat-meta";time.dateTime=c.latest.created_at;time.textContent=new Intl.DateTimeFormat("fr-FR",{hour:"2-digit",minute:"2-digit"}).format(new Date(c.latest.created_at));}
+    row.append(face,copy);if(time.textContent)row.append(time);
     row.addEventListener("click",()=>openChat(c.id)); chatItems.append(row);
   });
   if(conversations.length) await openChat(conversations[0].id);

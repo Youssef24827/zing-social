@@ -6,7 +6,7 @@ Maquette interactive d’un réseau social entre amis avec trois écrans : **Mes
 
 Le projet est un site statique en un seul fichier, `index.html`. Ouvre-le dans un navigateur pour afficher la maquette.
 
-Les contacts, messages, lieux et positions sont fictifs. La maquette ne demande pas la position réelle, n’envoie aucun message et ne sauvegarde pas les modifications. Les commandes visibles servent à illustrer le parcours de l’application.
+Les contacts, messages, lieux et positions sont fictifs. La maquette ne demande pas la position réelle et n’envoie aucun message. Les messages ajoutés et réglages de partage sont enregistrés uniquement dans le stockage local de ce navigateur ; ils ne sont pas synchronisés entre amis.
 
 ## Publication
 

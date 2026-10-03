@@ -72,8 +72,8 @@ function signedOut() {
   user = null; activeId = null; conversations = []; if (channel) db?.removeChannel(channel); channel = null;
   gate.hidden = false; signOut.hidden = true; byId("app-status").textContent = "✳ Messages privés";
   byId("sidebar-name").textContent = "Invité"; byId("sidebar-handle").textContent = "Connecte-toi pour discuter";
-  byId("sidebar-avatar").textContent = byId("top-avatar").textContent = "👋";
-  chatItems.replaceChildren(); chatCount.textContent = "0 contact"; emptyChats.style.display = "block";
+  byId("sidebar-avatar").textContent = byId("top-avatar").textContent = byId("mobile-profile").textContent = "👋";
+  chatItems.replaceChildren(); document.querySelector(".chat-layout")?.classList.remove("conversation-open"); chatCount.textContent = "0 contact"; emptyChats.style.display = "block";
   document.querySelectorAll(".nav-button .badge").forEach(badge=>{badge.textContent="0";badge.hidden=true;});
   emptyChats.textContent = "Connecte-toi pour retrouver tes contacts.";
   messages.innerHTML = '<div class="day-label">Connecte-toi pour démarrer une conversation privée.</div>';
@@ -87,7 +87,7 @@ async function signedIn(session) {
   const profile = data || { username: user.email.split("@")[0], display_name: user.email.split("@")[0] };
   gate.hidden = true; signOut.hidden = false; byId("app-status").textContent = "✳ Messages privés activés";
   byId("sidebar-name").textContent = $(".profile-name h2").textContent = profile.display_name || profile.username;
-  byId("sidebar-handle").textContent = `@${profile.username}`; byId("sidebar-avatar").textContent = byId("top-avatar").textContent = avatar(profile.username);
+  byId("sidebar-handle").textContent = `@${profile.username}`; byId("sidebar-avatar").textContent = byId("top-avatar").textContent = byId("mobile-profile").textContent = avatar(profile.username);
   $(".profile-handle").textContent = `@${profile.username} · membre Zing`;
   await refreshChats();
 }
@@ -100,10 +100,10 @@ async function refreshChats() {
   if(generation!==chatRefreshGeneration||user?.id!==requestedUserId)return;
   if (own.error) return notify("Impossible de charger les conversations.");
   const ids = [...new Set(own.data.map(row => row.conversation_id))];
-  if (!ids.length) { chatItems.replaceChildren(); conversations=[];activeId=null;chatCount.textContent="0 contact"; emptyChats.textContent="Aucun contact pour le moment. Appuie sur « Nouveau message » pour trouver un membre."; emptyChats.style.display="block"; messages.innerHTML='<div class="day-label">Tes messages privés apparaîtront ici.</div>'; input.disabled=send.disabled=true;return; }
+  if (!ids.length) { chatItems.replaceChildren();document.querySelector(".chat-layout")?.classList.remove("conversation-open");conversations=[];activeId=null;chatCount.textContent="0 contact"; emptyChats.textContent="Aucun contact pour le moment. Appuie sur « Nouveau message » pour trouver un membre."; emptyChats.style.display="block"; messages.innerHTML='<div class="day-label">Tes messages privés apparaîtront ici.</div>'; input.disabled=send.disabled=true;return; }
   const [members, latest] = await Promise.all([
     db.from("conversation_members").select("conversation_id,user_id").in("conversation_id",ids),
-    db.from("messages").select("conversation_id,content,created_at").in("conversation_id",ids).order("created_at",{ascending:false}).limit(100)
+    db.from("messages").select("conversation_id,content,created_at,sender_id").in("conversation_id",ids).order("created_at",{ascending:false}).limit(100)
   ]);
   if(generation!==chatRefreshGeneration||user?.id!==requestedUserId)return;
   if (members.error || latest.error) return notify("Impossible de lire tes conversations.");
@@ -125,21 +125,23 @@ async function refreshChats() {
     if(!previous||candidateTime>previousTime)newestByContact.set(contactKey,candidate);
   });
   conversations=[...newestByContact.values()].sort((a,b)=>(Date.parse(b.latest?.created_at||0)||0)-(Date.parse(a.latest?.created_at||0)||0));
-  chatItems.replaceChildren();activeId=null;
+  chatItems.replaceChildren();activeId=null;document.querySelector(".chat-layout")?.classList.remove("conversation-open");
   chatCount.textContent=`${conversations.length} contact${conversations.length===1?"":"s"}`; emptyChats.style.display=conversations.length?"none":"block";
   document.querySelectorAll(".nav-button .badge").forEach(badge=>{badge.textContent=String(conversations.length);badge.hidden=!conversations.length;});
   conversations.forEach(c=>{
-    const name=c.profile.display_name||c.profile.username, row=document.createElement("button"), face=document.createElement("span"), copy=document.createElement("span"), title=document.createElement("strong"), previewText=document.createElement("small"), time=document.createElement("time");
+    const name=c.profile.display_name||c.profile.username, row=document.createElement("button"), face=document.createElement("span"), copy=document.createElement("span"), title=document.createElement("strong"), previewText=document.createElement("small"), time=document.createElement("time"), status=document.createElement("span");
     row.type="button"; row.className="chat-row"; row.dataset.chat=c.id; row.dataset.name=name; face.className="avatar"; face.textContent=avatar(name);
-    copy.className="chat-copy"; title.textContent=name; previewText.textContent=c.latest?.content||"Commencez à discuter"; copy.append(title,previewText);
-    if(c.latest?.created_at){time.className="chat-meta";time.dateTime=c.latest.created_at;time.textContent=new Intl.DateTimeFormat("fr-FR",{hour:"2-digit",minute:"2-digit"}).format(new Date(c.latest.created_at));}
+    copy.className="chat-copy"; title.textContent=name; status.className=`chat-status-icon${c.latest?.sender_id===user.id?" sent":""}`; status.textContent=c.latest?.sender_id===user.id?"▷":"▢";
+    previewText.append(status,document.createTextNode(c.latest?`${c.latest.sender_id===user.id?"Envoyé":"Reçu"} · ${c.latest.content}`:"Commencez à discuter")); copy.append(title,previewText);
+    if(c.latest?.created_at){time.className="chat-meta";time.dateTime=c.latest.created_at;const age=Math.max(0,Date.now()-new Date(c.latest.created_at).getTime());time.textContent=age<60_000?"à l’instant":age<3_600_000?`${Math.max(1,Math.floor(age/60_000))} min`:age<86_400_000?`${Math.floor(age/3_600_000)} h`:new Intl.DateTimeFormat("fr-FR",{day:"numeric",month:"short"}).format(new Date(c.latest.created_at));}
     row.append(face,copy);if(time.textContent)row.append(time);
     row.addEventListener("click",()=>openChat(c.id)); chatItems.append(row);
   });
-  if(conversations.length) await openChat(conversations[0].id);
+  if(conversations.length&&window.matchMedia("(min-width:761px)").matches) await openChat(conversations[0].id);
 }
 async function openChat(id) {
   activeId=id; const c=conversations.find(item=>item.id===id); if(!c)return;
+  document.querySelector(".chat-layout")?.classList.add("conversation-open");
   chatItems.querySelectorAll(".chat-row").forEach(row=>row.classList.toggle("selected",row.dataset.chat===id));
   const name=c.profile.display_name||c.profile.username; byId("active-name").textContent=name; byId("active-avatar").textContent=avatar(name);
   byId("active-presence").textContent=`@${c.profile.username} · conversation privée`; input.disabled=send.disabled=false;
@@ -163,7 +165,7 @@ messageForm.addEventListener("submit",async event=>{
   event.preventDefault();event.stopImmediatePropagation();const content=input.value.trim();if(!content||!activeId||!user)return;
   send.disabled=true;const result=await db.from("messages").insert({conversation_id:activeId,sender_id:user.id,content}).select("id,sender_id,content,created_at,conversation_id").single();send.disabled=false;
   if(result.error)return notify("Le message n’a pas pu être envoyé.");input.value="";drawMessage(result.data);
-  const row=chatItems.querySelector(`[data-chat="${CSS.escape(activeId)}"] small`);if(row)row.textContent=content;
+  const preview=chatItems.querySelector(`[data-chat="${CSS.escape(activeId)}"] small`);if(preview){const marker=preview.querySelector(".chat-status-icon");if(marker){marker.classList.add("sent");marker.textContent="▷";}preview.replaceChildren(...(marker?[marker]:[]),document.createTextNode(`Envoyé · ${content}`));}
 },true);
 $("#chat-search").addEventListener("input",event=>{
   event.stopImmediatePropagation();const q=event.currentTarget.value.trim().toLowerCase();let count=0;
@@ -178,6 +180,21 @@ byId("new-message").addEventListener("click",async event=>{
   if(result.error)return notify("Impossible de créer cette conversation.");await refreshChats();await openChat(result.data);
 },true);
 $(".more").addEventListener("click",()=>document.querySelector('[data-screen="profil"]').click());
+byId("mobile-profile").addEventListener("click",()=>document.querySelector('[data-screen="profil"]').click());
+byId("mobile-search").addEventListener("click",()=>{const list=document.querySelector(".chat-list");list.classList.toggle("search-open");if(list.classList.contains("search-open"))byId("chat-search").focus();});
+byId("mobile-add").addEventListener("click",()=>byId("new-message").click());
+byId("mobile-compose").addEventListener("click",()=>byId("new-message").click());
+byId("back-to-chats").addEventListener("click",()=>document.querySelector(".chat-layout")?.classList.remove("conversation-open"));
+byId("friends-button").addEventListener("click",()=>byId("new-message").click());
+byId("camera-button").addEventListener("click",()=>notify("La caméra Zing arrive bientôt."));
+document.querySelectorAll("[data-screen]").forEach(button=>button.addEventListener("click",()=>{
+  const screen=button.dataset.screen;
+  document.querySelectorAll(".screen").forEach(panel=>panel.classList.toggle("active",panel.id===`screen-${screen}`));
+  document.querySelectorAll("[data-screen]").forEach(item=>item.classList.toggle("active",item.dataset.screen===screen));
+  document.querySelector(".chat-layout")?.classList.remove("conversation-open");
+  const label=screen==="carte"?"Carte":screen==="profil"?"Profil":"Chat";
+  byId("crumb-label").textContent=label;
+}));
 
 if(!db){authButton.disabled=true;authNote.textContent="La connexion n’est pas encore configurée.";authNote.classList.add("error");}
 else{

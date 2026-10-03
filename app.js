@@ -35,7 +35,7 @@ const gate = byId("auth-gate"), form = byId("auth-form"), username = byId("auth-
 const email = byId("auth-email"), password = byId("auth-password"), authNote = byId("auth-note"), authButton = byId("auth-submit");
 const switchButton = byId("auth-switch"), signOut = byId("sign-out"), input = byId("message-input"), send = $("#message-form .send");
 const chatItems = byId("chat-items"), emptyChats = byId("empty-chats"), messages = byId("messages"), chatCount = byId("chat-count");
-let mode = "login", user = null, activeId = null, channel = null, conversations = [];
+let mode = "login", user = null, activeId = null, channel = null, conversations = [], chatRefreshGeneration = 0;
 const avatar = (name) => ["🧑🏽","👩🏻","🧑🏻","👩🏽","👨🏼","👩🏼"][[...name].reduce((n,c)=>n+c.charCodeAt(0),0)%6];
 
 function setMode(next) {
@@ -68,6 +68,7 @@ form.addEventListener("submit", async (event) => {
 });
 
 function signedOut() {
+  chatRefreshGeneration++;
   user = null; activeId = null; conversations = []; if (channel) db?.removeChannel(channel); channel = null;
   gate.hidden = false; signOut.hidden = true; byId("app-status").textContent = "✳ Messages privés";
   byId("sidebar-name").textContent = "Invité"; byId("sidebar-handle").textContent = "Connecte-toi pour discuter";
@@ -80,7 +81,7 @@ function signedOut() {
   input.disabled = send.disabled = true;
 }
 async function signedIn(session) {
-  if (!session?.user || !db) return; user = session.user;
+  if (!session?.user || !db || user?.id === session.user.id) return; user = session.user;
   const { data, error } = await db.from("profiles").select("id,username,display_name").eq("id",user.id).maybeSingle();
   if (error) return notify("Impossible de charger ton profil.");
   const profile = data || { username: user.email.split("@")[0], display_name: user.email.split("@")[0] };
@@ -93,18 +94,22 @@ async function signedIn(session) {
 signOut.addEventListener("click", async () => { const { error } = await db.auth.signOut(); if (error) notify(errorText(error)); });
 
 async function refreshChats() {
-  const own = await db.from("conversation_members").select("conversation_id").eq("user_id",user.id);
+  const generation=++chatRefreshGeneration, requestedUserId=user?.id;
+  if(!requestedUserId)return;
+  const own = await db.from("conversation_members").select("conversation_id").eq("user_id",requestedUserId);
+  if(generation!==chatRefreshGeneration||user?.id!==requestedUserId)return;
   if (own.error) return notify("Impossible de charger les conversations.");
   const ids = [...new Set(own.data.map(row => row.conversation_id))];
-  chatItems.replaceChildren(); conversations = []; activeId = null;
-  if (!ids.length) { chatCount.textContent="0 contact"; emptyChats.textContent="Aucun contact pour le moment. Appuie sur « Nouveau message » pour trouver un membre."; emptyChats.style.display="block"; messages.innerHTML='<div class="day-label">Tes messages privés apparaîtront ici.</div>'; input.disabled=send.disabled=true; return; }
+  if (!ids.length) { chatItems.replaceChildren(); conversations=[];activeId=null;chatCount.textContent="0 contact"; emptyChats.textContent="Aucun contact pour le moment. Appuie sur « Nouveau message » pour trouver un membre."; emptyChats.style.display="block"; messages.innerHTML='<div class="day-label">Tes messages privés apparaîtront ici.</div>'; input.disabled=send.disabled=true;return; }
   const [members, latest] = await Promise.all([
     db.from("conversation_members").select("conversation_id,user_id").in("conversation_id",ids),
     db.from("messages").select("conversation_id,content,created_at").in("conversation_id",ids).order("created_at",{ascending:false}).limit(100)
   ]);
+  if(generation!==chatRefreshGeneration||user?.id!==requestedUserId)return;
   if (members.error || latest.error) return notify("Impossible de lire tes conversations.");
   const otherIds=[...new Set(members.data.filter(row=>row.user_id!==user.id).map(row=>row.user_id))];
   const profiles=await db.from("profiles").select("id,username,display_name").in("id",otherIds);
+  if(generation!==chatRefreshGeneration||user?.id!==requestedUserId)return;
   if (profiles.error) return notify("Impossible de lire les profils.");
   const byUser=new Map(profiles.data.map(p=>[p.id,p]));
   const byChat=new Map(); members.data.forEach(row=>{if(row.user_id!==user.id)byChat.set(row.conversation_id,byUser.get(row.user_id));});
@@ -113,12 +118,14 @@ async function refreshChats() {
   ids.forEach(id=>{
     const profile=byChat.get(id); if(!profile)return;
     const candidate={id,profile,latest:preview.get(id)};
-    const previous=newestByContact.get(profile.id);
+    const contactKey=(profile.username||profile.display_name||profile.id).trim().toLowerCase();
+    const previous=newestByContact.get(contactKey);
     const candidateTime=Date.parse(candidate.latest?.created_at||0)||0;
     const previousTime=Date.parse(previous?.latest?.created_at||0)||0;
-    if(!previous||candidateTime>previousTime)newestByContact.set(profile.id,candidate);
+    if(!previous||candidateTime>previousTime)newestByContact.set(contactKey,candidate);
   });
   conversations=[...newestByContact.values()].sort((a,b)=>(Date.parse(b.latest?.created_at||0)||0)-(Date.parse(a.latest?.created_at||0)||0));
+  chatItems.replaceChildren();activeId=null;
   chatCount.textContent=`${conversations.length} contact${conversations.length===1?"":"s"}`; emptyChats.style.display=conversations.length?"none":"block";
   document.querySelectorAll(".nav-button .badge").forEach(badge=>{badge.textContent=String(conversations.length);badge.hidden=!conversations.length;});
   conversations.forEach(c=>{

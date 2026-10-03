@@ -34,9 +34,18 @@ function notify(text) { toast.textContent = text; toast.classList.add("show"); s
 const gate = byId("auth-gate"), form = byId("auth-form"), username = byId("auth-username"), usernameLabel = byId("username-label");
 const email = byId("auth-email"), password = byId("auth-password"), authNote = byId("auth-note"), authButton = byId("auth-submit");
 const switchButton = byId("auth-switch"), signOut = byId("sign-out"), input = byId("message-input"), send = $("#message-form .send");
-const chatItems = byId("chat-items"), emptyChats = byId("empty-chats"), messages = byId("messages"), chatCount = byId("chat-count");
-let mode = "login", user = null, activeId = null, channel = null, conversations = [], chatRefreshGeneration = 0;
+const chatItems = byId("chat-items"), emptyChats = byId("empty-chats"), messages = byId("messages"), chatCount = byId("chat-count");let mode = "login", user = null, activeId = null, channel = null, conversations = [], chatRefreshGeneration = 0, ownProfile = null;
 const avatar = (name) => ["🧑🏽","👩🏻","🧑🏻","👩🏽","👨🏼","👩🏼"][[...name].reduce((n,c)=>n+c.charCodeAt(0),0)%6];
+function setAvatar(element, profile) {
+  if (!element) return;
+  if (profile?.avatar_display_url) { element.style.backgroundImage = `url("${profile.avatar_display_url.replaceAll('"','%22')}")`; element.classList.add("has-photo"); element.textContent = ""; }
+  else { element.style.backgroundImage = ""; element.classList.remove("has-photo"); element.textContent = avatar(profile?.username || profile?.display_name || "zing"); }
+}
+async function resolveAvatar(profile) {
+  if (profile?.avatar_url && !profile.avatar_display_url) { const {data,error}=await db.storage.from("zing-avatars").createSignedUrl(profile.avatar_url,3600); if(!error)profile.avatar_display_url=data.signedUrl; }
+  return profile;
+}
+
 
 function setMode(next) {
   mode = next; const signup = mode === "signup";
@@ -69,7 +78,7 @@ form.addEventListener("submit", async (event) => {
 
 function signedOut() {
   chatRefreshGeneration++;
-  user = null; activeId = null; conversations = []; if (channel) db?.removeChannel(channel); channel = null;
+  user = null; ownProfile = null; activeId = null; conversations = []; if (channel) db?.removeChannel(channel); channel = null;
   gate.hidden = false; signOut.hidden = true; byId("app-status").textContent = "✳ Messages privés";
   byId("sidebar-name").textContent = "Invité"; byId("sidebar-handle").textContent = "Connecte-toi pour discuter";
   byId("sidebar-avatar").textContent = byId("top-avatar").textContent = byId("mobile-profile").textContent = "👋";
@@ -82,12 +91,13 @@ function signedOut() {
 }
 async function signedIn(session) {
   if (!session?.user || !db || user?.id === session.user.id) return; user = session.user;
-  const { data, error } = await db.from("profiles").select("id,username,display_name").eq("id",user.id).maybeSingle();
+  let { data, error } = await db.from("profiles").select("id,username,display_name,avatar_url").eq("id",user.id).maybeSingle();
+  if(error && /avatar_url/i.test(error.message||"")){ const legacy=await db.from("profiles").select("id,username,display_name").eq("id",user.id).maybeSingle(); data=legacy.data; error=legacy.error; }
   if (error) return notify("Impossible de charger ton profil.");
-  const profile = data || { username: user.email.split("@")[0], display_name: user.email.split("@")[0] };
+  const profile = await resolveAvatar(data || { username: user.email.split("@")[0], display_name: user.email.split("@")[0] }); ownProfile = profile;
   gate.hidden = true; signOut.hidden = false; byId("app-status").textContent = "✳ Messages privés activés";
   byId("sidebar-name").textContent = $(".profile-name h2").textContent = profile.display_name || profile.username;
-  byId("sidebar-handle").textContent = `@${profile.username}`; byId("sidebar-avatar").textContent = byId("top-avatar").textContent = byId("mobile-profile").textContent = avatar(profile.username);
+  byId("sidebar-handle").textContent = `@${profile.username}`; [byId("sidebar-avatar"),byId("top-avatar"),byId("mobile-profile"),byId("profile-avatar")].forEach(el=>setAvatar(el,profile));
   $(".profile-handle").textContent = `@${profile.username} · membre Zing`;
   await refreshChats();
 }
@@ -108,7 +118,9 @@ async function refreshChats() {
   if(generation!==chatRefreshGeneration||user?.id!==requestedUserId)return;
   if (members.error || latest.error) return notify("Impossible de lire tes conversations.");
   const otherIds=[...new Set(members.data.filter(row=>row.user_id!==user.id).map(row=>row.user_id))];
-  const profiles=await db.from("profiles").select("id,username,display_name").in("id",otherIds);
+  let profiles=await db.from("profiles").select("id,username,display_name,avatar_url").in("id",otherIds);
+  if(profiles.error && /avatar_url/i.test(profiles.error.message||"")) profiles=await db.from("profiles").select("id,username,display_name").in("id",otherIds);
+  if(!profiles.error) await Promise.all(profiles.data.map(resolveAvatar));
   if(generation!==chatRefreshGeneration||user?.id!==requestedUserId)return;
   if (profiles.error) return notify("Impossible de lire les profils.");
   const byUser=new Map(profiles.data.map(p=>[p.id,p]));
@@ -130,7 +142,7 @@ async function refreshChats() {
   document.querySelectorAll(".nav-button .badge").forEach(badge=>{badge.textContent=String(conversations.length);badge.hidden=!conversations.length;});
   conversations.forEach(c=>{
     const name=c.profile.display_name||c.profile.username, row=document.createElement("button"), face=document.createElement("span"), copy=document.createElement("span"), title=document.createElement("strong"), previewText=document.createElement("small"), time=document.createElement("time"), status=document.createElement("span");
-    row.type="button"; row.className="chat-row"; row.dataset.chat=c.id; row.dataset.name=name; face.className="avatar"; face.textContent=avatar(name);
+    row.type="button"; row.className="chat-row"; row.dataset.chat=c.id; row.dataset.name=name; face.className="avatar"; setAvatar(face,c.profile);
     copy.className="chat-copy"; title.textContent=name; status.className=`chat-status-icon${c.latest?.sender_id===user.id?" sent":""}`; status.textContent=c.latest?.sender_id===user.id?"▷":"▢";
     previewText.append(status,document.createTextNode(c.latest?`${c.latest.sender_id===user.id?"Envoyé":"Reçu"} · ${c.latest.content}`:"Commencez à discuter")); copy.append(title,previewText);
     if(c.latest?.created_at){time.className="chat-meta";time.dateTime=c.latest.created_at;const age=Math.max(0,Date.now()-new Date(c.latest.created_at).getTime());time.textContent=age<60_000?"à l’instant":age<3_600_000?`${Math.max(1,Math.floor(age/60_000))} min`:age<86_400_000?`${Math.floor(age/3_600_000)} h`:new Intl.DateTimeFormat("fr-FR",{day:"numeric",month:"short"}).format(new Date(c.latest.created_at));}
@@ -143,7 +155,7 @@ async function openChat(id) {
   activeId=id; const c=conversations.find(item=>item.id===id); if(!c)return;
   document.querySelector(".chat-layout")?.classList.add("conversation-open");
   chatItems.querySelectorAll(".chat-row").forEach(row=>row.classList.toggle("selected",row.dataset.chat===id));
-  const name=c.profile.display_name||c.profile.username; byId("active-name").textContent=name; byId("active-avatar").textContent=avatar(name);
+  const name=c.profile.display_name||c.profile.username; byId("active-name").textContent=name; byId("active-avatar").textContent=avatar(name); setAvatar(byId("active-avatar"),c.profile);
   byId("active-presence").textContent=`@${c.profile.username} · conversation privée`; input.disabled=send.disabled=false;
   const result=await db.from("messages").select("id,sender_id,content,created_at,conversation_id").eq("conversation_id",id).order("created_at",{ascending:true}).limit(100);
   if(result.error)return notify("Impossible de charger les messages."); messages.replaceChildren();
@@ -201,4 +213,12 @@ else{
   signedOut();
   db.auth.onAuthStateChange((_event,session)=>setTimeout(()=>session?signedIn(session):signedOut(),0));
   db.auth.getSession().then(({data})=>data.session&&signedIn(data.session));
-}
+}if(!byId("profile-dialog"))document.body.insertAdjacentHTML("beforeend",`<dialog id="profile-dialog" class="profile-dialog"><form id="profile-form"><h2>Modifier mon profil</h2><label for="profile-username">Pseudo</label><input id="profile-username" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" required><label for="profile-photo">Photo de profil</label><input id="profile-photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><small>Photo privée aux membres connectés · 2 Mo maximum.</small><div class="dialog-actions"><button type="button" id="cancel-profile">Annuler</button><button type="submit" id="save-profile">Enregistrer</button></div></form></dialog>`);
+const desktopStyle=document.createElement("style");desktopStyle.textContent=`@media(min-width:761px){body:has(#screen-messagerie.active){height:100dvh;overflow:hidden}.app{height:100dvh;min-height:0;max-width:none;padding:12px;gap:12px;grid-template-columns:72px minmax(0,1fr)}.sidebar{height:calc(100dvh - 24px);min-height:0;top:12px;padding:22px 10px}.brand{justify-content:center;padding:0 0 29px;font-size:0}.brand-mark{font-size:19px}.nav-label,.privacy-mini,.user-info,.more{display:none}.nav-list{gap:10px}.nav-button{height:54px;justify-content:center;padding:8px 3px;font-size:0;position:relative}.nav-icon{font-size:21px}.nav-button .badge{position:absolute;right:4px;top:4px;font-size:8px;padding:2px 5px}.sidebar-bottom{margin-top:auto}.user-mini{justify-content:center;padding:14px 0 0}.workspace{height:calc(100dvh - 24px);min-height:0;display:flex;flex-direction:column}.topbar{height:58px;min-height:58px;padding:0 22px}.screen.active#screen-messagerie{height:calc(100% - 58px);min-height:0;padding:19px 22px 20px;display:flex;flex-direction:column;overflow:hidden}.screen.active#screen-messagerie .page-heading{margin-bottom:14px;align-items:center}.screen.active#screen-messagerie .eyebrow{margin-bottom:4px}.screen.active#screen-messagerie .page-heading h1{font-size:22px}.screen.active#screen-messagerie .page-heading p{font-size:11px}.chat-layout{height:auto;min-height:0;flex:1;grid-template-columns:300px minmax(0,1fr);border-radius:18px}.chat-list{padding:14px 12px}.chat-panel{min-height:0}.messages{padding:24px clamp(20px,5vw,74px)}.chat-row{min-height:72px}.chat-copy strong{font-size:12px}.chat-copy small{font-size:10px}.back-to-chats{display:none}}.avatar,.profile-avatar,.top-avatar,.mobile-profile{background-size:cover;background-position:center;background-repeat:no-repeat}.has-photo{color:transparent!important}.profile-dialog{width:min(420px,calc(100% - 28px));border:1px solid #e9ebe3;border-radius:20px;padding:24px;box-shadow:0 24px 80px #14200b44}.profile-dialog::backdrop{background:#17201488;backdrop-filter:blur(4px)}.profile-dialog h2{margin:0 0 18px;font-size:19px}.profile-dialog label{display:block;margin:13px 0 7px;font-size:12px;font-weight:700}.profile-dialog input{width:100%;border:1px solid #e9ebe3;border-radius:10px;padding:11px}.profile-dialog small{display:block;color:#858a84;font-size:11px;line-height:1.5;margin-top:12px}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.dialog-actions button{border:0;border-radius:10px;padding:10px 14px;font-weight:700}.dialog-actions #cancel-profile{background:#f1f3eb}.dialog-actions #save-profile{background:#202321;color:#fff}`;document.head.append(desktopStyle);const ownAvatarElement=document.querySelector(".profile-avatar");if(ownAvatarElement)ownAvatarElement.id="profile-avatar";
+
+
+
+const profileDialog=byId("profile-dialog"),profileForm=byId("profile-form"),profileUsername=byId("profile-username"),profilePhoto=byId("profile-photo");
+byId("edit-profile").addEventListener("click",()=>{if(!user||!ownProfile)return notify("Connecte-toi pour modifier ton profil.");profileUsername.value=ownProfile.username||"";profilePhoto.value="";profileDialog.showModal();});
+byId("cancel-profile").addEventListener("click",()=>profileDialog.close());
+profileForm.addEventListener("submit",async event=>{event.preventDefault();if(!user||!ownProfile)return;const next=profileUsername.value.trim().replace(/^@/,"").toLowerCase(),file=profilePhoto.files?.[0];if(!/^[a-z0-9_]{3,24}$/.test(next))return notify("Pseudo invalide : 3 à 24 lettres, chiffres ou _.");if(file&&(!file.type.startsWith("image/")||file.size>2097152))return notify("Choisis une image de 2 Mo maximum.");const button=byId("save-profile");button.disabled=true;try{const changes={username:next,display_name:next};if(file){const ext=({"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif"})[file.type];if(!ext)return notify("Format d’image non pris en charge.");const path=user.id+"/profile."+ext;const uploaded=await db.storage.from("zing-avatars").upload(path,file,{upsert:true,contentType:file.type});if(uploaded.error)throw uploaded.error;changes.avatar_url=path;}let saved=await db.from("profiles").update(changes).eq("id",user.id).select("id,username,display_name,avatar_url").single();if(saved.error&&/avatar_url/i.test(saved.error.message||"")){delete changes.avatar_url;saved=await db.from("profiles").update(changes).eq("id",user.id).select("id,username,display_name").single();}if(saved.error)throw saved.error;ownProfile=await resolveAvatar(saved.data);byId("sidebar-name").textContent=$(".profile-name h2").textContent=ownProfile.display_name;byId("sidebar-handle").textContent="@"+ownProfile.username;$(".profile-handle").textContent="@"+ownProfile.username+" · membre Zing";[byId("profile-avatar"),byId("sidebar-avatar"),byId("top-avatar"),byId("mobile-profile")].forEach(el=>setAvatar(el,ownProfile));profileDialog.close();notify("Profil mis à jour.");}catch(error){notify(/duplicate key|unique/i.test(String(error.message))?"Ce pseudo est déjà utilisé.":"Impossible d’enregistrer. Vérifie le stockage des photos.");}finally{button.disabled=false;}});

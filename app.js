@@ -241,3 +241,5 @@ const refreshChatsBeforeNotifications=refreshChats;refreshChats=async function()
 const signedOutBeforeNotifications=signedOut;signedOut=function(){for(const channel of notificationChannels)db?.removeChannel(channel);notificationChannels=[];signedOutBeforeNotifications();};
 
 }
+
+const compactControlStyle=document.createElement("style");compactControlStyle.textContent=".desktop-main-nav,.desktop-chat-tools{display:none}@media(min-width:761px){.desktop-main-nav{display:flex}.desktop-chat-tools{display:flex}}";document.head.append(compactControlStyle);

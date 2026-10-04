@@ -243,3 +243,134 @@ const signedOutBeforeNotifications=signedOut;signedOut=function(){for(const chan
 }
 
 const compactControlStyle=document.createElement("style");compactControlStyle.textContent=".desktop-main-nav,.desktop-chat-tools{display:none}@media(min-width:761px){.desktop-main-nav{display:flex}.desktop-chat-tools{display:flex}}";document.head.append(compactControlStyle);
+// ================================
+// ZING — SYSTÈME D'INTERFACES
+// ================================
+
+(() => {
+  const THEMES = {
+    zing: {
+      name: "Zing",
+      emoji: "✳️",
+      description: "L'interface Zing originale"
+    },
+    instagram: {
+      name: "Instagram",
+      emoji: "📸",
+      description: "Une interface inspirée d'Instagram"
+    },
+    whatsapp: {
+      name: "WhatsApp",
+      emoji: "💬",
+      description: "Une interface inspirée de WhatsApp"
+    },
+    tiktok: {
+      name: "TikTok",
+      emoji: "🎵",
+      description: "Une interface inspirée de TikTok"
+    },
+    snapchat: {
+      name: "Snapchat",
+      emoji: "👻",
+      description: "Une interface inspirée de Snapchat"
+    }
+  };
+
+  const STORAGE_KEY = "zing-interface";
+  const savedTheme = localStorage.getItem(STORAGE_KEY) || "zing";
+
+  function applyTheme(theme) {
+    if (!THEMES[theme]) theme = "zing";
+
+    document.documentElement.dataset.zingInterface = theme;
+    localStorage.setItem(STORAGE_KEY, theme);
+
+    document.querySelectorAll("[data-interface-choice]").forEach(button => {
+      button.classList.toggle(
+        "selected",
+        button.dataset.interfaceChoice === theme
+      );
+    });
+
+    const current = document.querySelector("#current-interface-name");
+    if (current) {
+      current.textContent = THEMES[theme].name;
+    }
+
+    const currentEmoji = document.querySelector("#current-interface-emoji");
+    if (currentEmoji) {
+      currentEmoji.textContent = THEMES[theme].emoji;
+    }
+  }
+
+  function createInterfaceSettings() {
+    const settingsCard = document.querySelector(".settings-card");
+    if (!settingsCard || document.querySelector("#interface-settings")) return;
+
+    const section = document.createElement("div");
+    section.id = "interface-settings";
+    section.className = "interface-settings";
+
+    section.innerHTML = `
+      <div class="interface-heading">
+        <div>
+          <h2>🎨 Interface</h2>
+          <p>Choisis la façon dont tu veux utiliser Zing.</p>
+        </div>
+      </div>
+
+      <div class="current-interface">
+        <span id="current-interface-emoji"></span>
+        <div>
+          <strong>Interface actuelle</strong>
+          <small id="current-interface-name"></small>
+        </div>
+      </div>
+
+      <div class="interface-options">
+        ${Object.entries(THEMES).map(([id, theme]) => `
+          <button
+            type="button"
+            class="interface-choice"
+            data-interface-choice="${id}"
+          >
+            <span class="interface-choice-icon">${theme.emoji}</span>
+            <span class="interface-choice-copy">
+              <strong>${theme.name}</strong>
+              <small>${theme.description}</small>
+            </span>
+            <span class="interface-check">✓</span>
+          </button>
+        `).join("")}
+      </div>
+    `;
+
+    settingsCard.appendChild(section);
+
+    section.querySelectorAll("[data-interface-choice]").forEach(button => {
+      button.addEventListener("click", () => {
+        applyTheme(button.dataset.interfaceChoice);
+
+        if (typeof notify === "function") {
+          notify(
+            `Interface ${THEMES[button.dataset.interfaceChoice].name} activée.`
+          );
+        }
+      });
+    });
+
+    applyTheme(savedTheme);
+  }
+
+  createInterfaceSettings();
+
+  // Le profil peut être chargé dynamiquement.
+  const observer = new MutationObserver(() => {
+    createInterfaceSettings();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+})();
